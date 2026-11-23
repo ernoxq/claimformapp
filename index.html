@@ -1061,7 +1061,8 @@ function startDraft(file, existing){
   if(file){ S.draft._reading=true; render(); readFile(file); } else render();
   window.scrollTo(0,0);
 }
-function openReceipt(id){ const r=S.receipts.find(x=>String(x.id)===String(id)); if(!r){ toast(T().notFound); refresh().then(render).catch(()=>{}); return; } startDraft(null,r); }
+function openReceipt(id){ S.backScroll={screen:S.screen,formId:S.formId,y:window.scrollY};   // coming back = the same place in the list
+  const r=S.receipts.find(x=>String(x.id)===String(id)); if(!r){ toast(T().notFound); refresh().then(render).catch(()=>{}); return; } startDraft(null,r); }
 function pickFile(gallery){ const inp = gallery ? $("#fileInputGallery") : $("#fileInput"); inp.value=""; inp.click(); }
 ["#fileInput","#fileInputGallery"].forEach(id=>$(id).addEventListener("change",e=>{ const fs=e.target.files; if(!fs||!fs.length) return; if(fs.length>1) startBatch(fs); else startDraft(fs[0]); }));
 function pickFileFor(d){ const inp=$("#fileInput"); inp.value=""; const h=e=>{ inp.removeEventListener("change",h,true); e.stopImmediatePropagation(); const f=e.target.files[0]; if(f){ d.photo_id=""; d._reading=true; render(); readFile(f);} }; inp.addEventListener("change",h,true); inp.click(); }
@@ -1253,11 +1254,18 @@ function wizBack(){
   if(S.editField){ S.editField=null; render(); return; }
   if(d && d._existing && S.step===4 && !S.returnTo4){ wizExit(true); return; }   // a saved receipt opens on the review → back = leave
   if(S.step>1){ S.step--; render(); window.scrollTo(0,0); } else wizExit(true); }
+/* back from a receipt opened in a list → the list stays where it was (not the top) */
+function restoreScroll(){
+  const b=S.backScroll; S.backScroll=null;
+  if(!b || b.screen!==S.screen || (b.screen==="form" && b.formId!==S.formId)){ window.scrollTo(0,0); return; }
+  let n=0; const go2=()=>{ window.scrollTo(0,b.y); if(Math.abs(window.scrollY-b.y)>2 && ++n<20) requestAnimationFrame(go2); };   // the list may still be drawing
+  requestAnimationFrame(go2);
+}
 /* leave the receipt: back to the claim form it was opened from (or home) */
 function wizExit(force){
   const d=S.draft||{}, t=T();
   const leave=()=>{ const f=d.form_id && d.form_id!=="new" && formById(d.form_id); S.editField=null; S.returnTo4=false;
-    if(S.draftFrom==="form" && f){ S.formId=f.id; go("form"); } else go("home"); window.scrollTo(0,0); };
+    if(S.draftFrom==="form" && f){ S.formId=f.id; go("form"); } else go("home"); restoreScroll(); };
   const dirty=!d._existing && (d.amount || d.vendor || d.photo_id);
   if(force || !dirty || !tg || !tg.showConfirm) return leave();
   try{ tg.showConfirm(t.exitQ, ok=>{ if(ok) leave(); }); }catch(e){ leave(); }
@@ -1549,7 +1557,7 @@ async function saveDraft(){
     S.pendingForm=null; haptic("success");
     syncForm(j.form_id); if(j.old_form_id) syncForm(j.old_form_id);
     if(S.queue && queueNext(j.form_id)){ toast(t.qNext); return; }
-    toast(t.saved); const sf=formById(j.form_id); if(sf){ S.formId=sf.id; go("form"); } else go("home"); window.scrollTo(0,0);
+    toast(t.saved); const sf=formById(j.form_id); if(sf){ S.formId=sf.id; go("form"); } else go("home"); if(d._existing) restoreScroll(); else { S.backScroll=null; window.scrollTo(0,0); }
   }catch(e){
     if(e.dup){ d._dup=e.dup; if(d.not_dup && !e.dup.by_photo) d.not_dup=false; haptic("error"); toast(t.dupShort); step4($("#main")); window.scrollTo(0,0); return; }
     toast(t.err+": "+e.message); haptic("error"); step4($("#main")); }
