@@ -48,7 +48,19 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .langbtn .chev{width:14px;height:14px;color:var(--muted)}
 .roundbtn{width:44px;height:44px;border:0;border-radius:50%;background:var(--card);color:var(--ink);box-shadow:var(--shadow);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
 .roundbtn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.roundbtn .sun,html.mono .roundbtn .moon{display:none}html.mono .roundbtn .sun{display:block}
+#monoBtn{position:relative}
+#monoBtn svg{position:absolute;left:50%;top:50%;margin:-10px 0 0 -10px;transition:transform .5s cubic-bezier(.32,.72,0,1),opacity .3s ease}
+#monoBtn .sun,html.mono #monoBtn .moon{opacity:0;transform:rotate(-90deg) scale(.4)}
+html.mono #monoBtn .sun{opacity:1;transform:none}
+/* smooth theme switch: circular reveal from the button (View Transitions) */
+html.theming *,html.theming *::before,html.theming *::after{transition:none!important}
+html.theming #monoBtn svg{transition:transform .5s cubic-bezier(.32,.72,0,1),opacity .3s ease!important}
+::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
+::view-transition-new(root){z-index:2}
+/* fallback when View Transitions aren't supported: soft cross-fade of colours */
+html.themefade *,html.themefade *::before,html.themefade *::after{transition:background-color .45s ease,color .45s ease,border-color .45s ease,fill .45s ease,stroke .45s ease,box-shadow .45s ease!important}
+html.themefade #monoBtn svg{transition:transform .5s cubic-bezier(.32,.72,0,1),opacity .3s ease!important}
+@media (prefers-reduced-motion:reduce){#monoBtn svg{transition:none}}
 .langbtn:active,.roundbtn:active{transform:scale(.94)}
 .chopt .langok{width:32px;height:32px;border-radius:50%;background:var(--black);color:var(--on-black);display:flex;align-items:center;justify-content:center;flex:none}.chopt .langok svg{width:16px;height:16px}
 .chopt .langcode{font-weight:800;font-size:13px;color:var(--muted)}
@@ -2064,7 +2076,29 @@ function setMono(on){ document.documentElement.classList.toggle("mono",on); $("#
 /* Telegram's own top bar (Back · title · ⋯) and bottom area follow the app theme */
 function tgColors(){ if(!tg) return; const c=document.documentElement.classList.contains("mono")?"#0D0E10":"#F1F2F4";
   try{ tg.setHeaderColor(c); }catch(e){} try{ tg.setBackgroundColor(c); }catch(e){} try{ tg.setBottomBarColor && tg.setBottomBarColor(c); }catch(e){} }
-setMono(!!load("mono",false)); $("#monoBtn").onclick=()=>setMono(!document.documentElement.classList.contains("mono"));
+setMono(!!load("mono",false));
+let themeBusy=false;
+function switchTheme(){
+  if(themeBusy) return;
+  const root=document.documentElement, on=!root.classList.contains("mono");
+  const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(reduce){ setMono(on); return; }
+  if(!document.startViewTransition){
+    root.classList.add("themefade"); setMono(on);
+    setTimeout(()=>root.classList.remove("themefade"),500); return;
+  }
+  themeBusy=true;
+  const r=$("#monoBtn").getBoundingClientRect(), x=r.left+r.width/2, y=r.top+r.height/2;
+  const end=Math.hypot(Math.max(x,innerWidth-x),Math.max(y,innerHeight-y));
+  root.classList.add("theming");
+  const vt=document.startViewTransition(()=>setMono(on));
+  vt.ready.then(()=>{
+    root.animate({clipPath:[`circle(0px at ${x}px ${y}px)`,`circle(${end}px at ${x}px ${y}px)`]},
+      {duration:560,easing:"cubic-bezier(.4,0,.2,1)",pseudoElement:"::view-transition-new(root)"});
+  }).catch(()=>{});
+  vt.finished.finally(()=>{ root.classList.remove("theming"); themeBusy=false; });
+}
+$("#monoBtn").onclick=switchTheme;
 $("#langBtn").onclick=()=>{ haptic(); openLangPicker(); };
 if(tg){
   tg.ready(); tg.expand();
